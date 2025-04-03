@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsc --noEmit && tsx --watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "bun dist/server.js"
   },
   "author": "Tacio de Souza Campos",
   "license": "MIT",
