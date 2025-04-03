@@ -7,6 +7,7 @@ import { db } from './config/database.js'
 import { chats, users } from './db/schema.js'
 import { eq } from 'drizzle-orm'
 import { ChatCompletionMessage } from 'openai/resources'
+import { ChatCompletionMessageParam } from 'openai/src/resources.js'
 
 dotenv.config()
 
@@ -90,6 +91,25 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
         //     messages: [{ role: 'user', content: message }]
         // })
 
+
+        // Fetch users past messages for context
+        const chatHistory = await db
+            .select()
+            .from(chats)
+            .where(eq(chats.userId, userId))
+            .orderBy(chats.createdAt)
+            .limit(10)
+        
+        // Format chat history for OpenRouter
+        const conversation: ChatCompletionMessageParam[] = chatHistory.flatMap((chat) => [
+            { role: 'user', content: chat.message },
+            { role: 'assistant', content: chat.reply },
+        ])
+
+        // Add latest user messages to the conversatition
+        conversation.push({ "role": "user", "content": message })
+
+        // Send message to OpenRouter
         const responseBlob = await fetch('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -98,7 +118,7 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
             },
             body: JSON.stringify({
                 "model": "deepseek/deepseek-chat-v3-0324:free",
-                "messages": [{ "role": "user", "content": message }],
+                "messages": conversation,
                 "stream": false
               })
         })
@@ -109,7 +129,7 @@ app.post('/chat', async (req: Request, res: Response): Promise<any> => {
 
         const completion = await responseBlob.json()
 
-        const aiMessage = completion.choices[0].message?.content ?? 'Sem resposta da AI'
+        const aiMessage = completion?.choices[0]?.message?.content ?? 'Sem resposta da AI'
 
         // Save chat to database
         await db.insert(chats).values({ userId, message, reply: aiMessage })
